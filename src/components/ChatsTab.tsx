@@ -3,7 +3,7 @@ import { UserProfile, ChatMessage } from "../types";
 import { getSocket } from "../services/socket";
 import { getLanguageByName } from "../constants/languages";
 import { speakText } from "../services/audio";
-import { Send, Volume2, Sparkles, MessageSquare, Globe } from "lucide-react";
+import { Send, Volume2, MessageSquare } from "lucide-react";
 
 interface ChatsTabProps {
   currentUser: UserProfile;
@@ -83,7 +83,7 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
         targetLang: selectedUser.myLanguage,
       });
 
-      // If chatting with demo contact, generate simulated reply
+      // If chatting with demo contact, generate reply
       if (selectedUser.userId.startsWith("demo_")) {
         setTimeout(async () => {
           try {
@@ -91,15 +91,14 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                text: `Reply naturally as ${selectedUser.name} to: "${text}"`,
+                text: `Reply in 1 casual sentence as ${selectedUser.name} to: "${text}"`,
                 sourceLang: "English",
                 targetLang: selectedUser.myLanguage,
               }),
             });
             const data = await res.json();
-            const replyMsg = data.translatedText || `Sounds great! Multilingual chat is working.`;
+            const replyMsg = data.translatedText || `Got it! Multilingual chat is working.`;
 
-            // Translate back for current user
             const replyTransRes = await fetch("/api/translate-text", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -139,20 +138,15 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
   const otherUsers = onlineUsers.filter((u) => u.username !== currentUser.username);
 
   return (
-    <div className="max-w-5xl mx-auto h-[calc(100vh-8.5rem)] min-h-[500px] bg-white border-2 border-zinc-200 rounded-[2rem] overflow-hidden flex flex-col md:flex-row shadow-sm">
-      {/* Contact sidebar list */}
-      <div className="w-full md:w-80 bg-zinc-50 border-b md:border-b-0 md:border-r-2 border-zinc-200 flex flex-col">
-        <div className="p-4 border-b-2 border-zinc-200 flex items-center justify-between">
-          <div className="text-sm font-bold text-zinc-900 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-indigo-600" />
-            <span>Translated Chats</span>
-          </div>
-          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold uppercase tracking-wider">
-            Auto AI
-          </span>
+    <div className="max-w-4xl mx-auto h-[calc(100vh-9rem)] min-h-[500px] bg-white border border-zinc-200 rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-xs">
+      {/* Contact sidebar */}
+      <div className="w-full md:w-72 bg-zinc-50 border-b md:border-b-0 md:border-r border-zinc-200 flex flex-col">
+        <div className="p-3.5 border-b border-zinc-200 flex items-center justify-between">
+          <span className="text-xs font-bold text-zinc-800 uppercase tracking-wider">Conversations</span>
+          <span className="text-[10px] text-zinc-400 font-medium">Auto-Translated</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {otherUsers.map((user) => {
             const isSelected = selectedUser?.username === user.username;
             const lang = getLanguageByName(user.myLanguage);
@@ -160,27 +154,25 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
               <button
                 key={user.username}
                 onClick={() => setSelectedUser(user)}
-                className={`w-full p-3 rounded-2xl flex items-center gap-3 transition-all text-left cursor-pointer ${
+                className={`w-full p-2.5 rounded-xl flex items-center gap-3 transition-colors text-left cursor-pointer ${
                   isSelected
-                    ? "bg-indigo-50 border-2 border-indigo-600 text-zinc-900 shadow-xs"
-                    : "hover:bg-zinc-100 text-zinc-700 border-2 border-transparent"
+                    ? "bg-white text-zinc-900 shadow-xs border border-zinc-200"
+                    : "hover:bg-zinc-100 text-zinc-700"
                 }`}
               >
                 <div className="relative">
                   <img
                     src={user.picture}
                     alt={user.name}
-                    className="w-10 h-10 rounded-2xl object-cover border-2 border-zinc-200 bg-zinc-200"
+                    className="w-9 h-9 rounded-full object-cover border border-zinc-200 bg-zinc-100"
                   />
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white" />
+                  <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white" />
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold truncate text-zinc-900">{user.name}</div>
-                  <div className="text-[11px] text-zinc-400 font-medium truncate">@{user.username}</div>
-                  <div className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 mt-0.5">
-                    <span>{lang.flag}</span>
-                    <span>{lang.name}</span>
+                  <div className="text-xs font-semibold truncate text-zinc-900">{user.name}</div>
+                  <div className="text-[11px] text-zinc-400 font-medium truncate">
+                    {lang.flag} {lang.name}
                   </div>
                 </div>
               </button>
@@ -189,39 +181,29 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
         </div>
       </div>
 
-      {/* Main chat conversation window */}
+      {/* Main chat window */}
       <div className="flex-1 flex flex-col bg-white">
         {selectedUser ? (
           <>
             {/* Header */}
-            <div className="p-4 bg-white border-b-2 border-zinc-200 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="p-3.5 bg-white border-b border-zinc-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
                 <img
                   src={selectedUser.picture}
                   alt={selectedUser.name}
-                  className="w-10 h-10 rounded-2xl object-cover border-2 border-zinc-200 bg-zinc-100"
+                  className="w-8 h-8 rounded-full object-cover border border-zinc-200"
                 />
                 <div>
-                  <div className="text-xs font-bold text-zinc-900 flex items-center gap-2">
-                    <span>{selectedUser.name}</span>
-                    <span className="text-[11px] text-zinc-400 font-medium">(@{selectedUser.username})</span>
-                  </div>
-                  <div className="text-[11px] text-zinc-500 font-medium flex items-center gap-1.5">
-                    <span>Speaks: {getLanguageByName(selectedUser.myLanguage).flag} {selectedUser.myLanguage}</span>
-                    <span className="text-zinc-300">·</span>
-                    <span className="text-emerald-600 font-bold">Online</span>
+                  <div className="text-xs font-bold text-zinc-900">{selectedUser.name}</div>
+                  <div className="text-[11px] text-zinc-400">
+                    Speaks {getLanguageByName(selectedUser.myLanguage).flag} {selectedUser.myLanguage}
                   </div>
                 </div>
               </div>
-
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-zinc-100 border border-zinc-200 rounded-full text-xs text-zinc-600 font-medium">
-                <Globe className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Auto-translates between {currentUser.myLanguage} & {selectedUser.myLanguage}</span>
-              </div>
             </div>
 
-            {/* Message Feed */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-50/50">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-zinc-50/50">
               {messages.map((msg) => {
                 const isSelf = msg.fromUsername === currentUser.username;
                 return (
@@ -230,24 +212,20 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
                     className={`flex flex-col ${isSelf ? "items-end" : "items-start"}`}
                   >
                     <div
-                      className={`max-w-md p-3.5 rounded-2xl text-xs space-y-1.5 shadow-sm ${
+                      className={`max-w-md p-3 rounded-2xl text-xs space-y-1 ${
                         isSelf
-                          ? "bg-indigo-600 text-white rounded-br-xs border border-indigo-700"
-                          : "bg-white text-zinc-800 border-2 border-zinc-200 rounded-bl-xs"
+                          ? "bg-zinc-900 text-white rounded-br-xs"
+                          : "bg-white text-zinc-900 border border-zinc-200 rounded-bl-xs shadow-xs"
                       }`}
                     >
-                      {/* Original text */}
-                      <div className={`font-medium ${isSelf ? "text-white" : "text-zinc-900"}`}>
-                        {msg.originalText}
-                      </div>
+                      <div className="font-normal">{msg.originalText}</div>
 
-                      {/* Translated subtext */}
                       {msg.translatedText && msg.translatedText !== msg.originalText && (
                         <div
-                          className={`pt-1.5 border-t text-[11px] flex items-center justify-between gap-2 ${
+                          className={`pt-1 border-t text-[11px] flex items-center justify-between gap-2 ${
                             isSelf
-                              ? "border-indigo-400/50 text-indigo-100"
-                              : "border-zinc-200 text-emerald-700 font-medium"
+                              ? "border-zinc-700 text-zinc-300"
+                              : "border-zinc-100 text-zinc-500"
                           }`}
                         >
                           <div className="italic">
@@ -259,8 +237,8 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
 
                           <button
                             onClick={() => handleSpeak(msg.translatedText, msg.targetLang)}
-                            title="Speak translation"
-                            className="p-1 hover:bg-black/10 rounded text-inherit transition-colors cursor-pointer"
+                            title="Speak"
+                            className="p-0.5 hover:opacity-75 cursor-pointer"
                           >
                             <Volume2 className="w-3.5 h-3.5" />
                           </button>
@@ -268,8 +246,11 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
                       )}
                     </div>
 
-                    <span className="text-[10px] text-zinc-400 px-1 mt-1 font-mono">
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    <span className="text-[10px] text-zinc-400 px-1 mt-0.5">
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </span>
                   </div>
                 );
@@ -277,34 +258,31 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Form */}
-            <form onSubmit={handleSendMessage} className="p-3.5 bg-zinc-50 border-t-2 border-zinc-200 flex gap-2">
+            {/* Input */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-zinc-200 flex gap-2">
               <input
                 id="chat-message-input"
                 type="text"
-                placeholder={`Type in ${currentUser.myLanguage}... It will be translated to ${selectedUser.myLanguage}`}
+                placeholder={`Type in ${currentUser.myLanguage}...`}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                className="flex-1 bg-white border-2 border-zinc-200 text-zinc-900 px-4 py-2.5 rounded-xl text-xs outline-none focus:border-indigo-600 transition-all font-medium placeholder:text-zinc-400"
+                className="flex-1 bg-zinc-50 border border-zinc-200 text-zinc-900 px-3.5 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 focus:bg-white transition-colors"
               />
               <button
                 id="chat-send-btn"
                 type="submit"
                 disabled={!inputText.trim() || isSending}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm border border-indigo-700 cursor-pointer"
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <span>Send</span>
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-3 h-3" />
               </button>
             </form>
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-400">
-            <MessageSquare className="w-12 h-12 text-zinc-300 mb-3" />
-            <p className="text-sm font-bold text-zinc-700">Select a contact to start chatting</p>
-            <p className="text-xs text-zinc-400 mt-1">
-              Every message is automatically translated into the recipient's native language.
-            </p>
+            <MessageSquare className="w-8 h-8 text-zinc-300 mb-2" />
+            <p className="text-xs font-semibold text-zinc-700">Select a contact to message</p>
           </div>
         )}
       </div>

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { UserProfile } from "../types";
 import { SUPPORTED_LANGUAGES } from "../constants/languages";
-import { playBase64Audio, speakText } from "../services/audio";
-import { AtSign, Check, X, Loader2, Sparkles, Volume2 } from "lucide-react";
+import { AtSign, Check, X, Loader2 } from "lucide-react";
 
 interface UsernameSetupProps {
   initialUser: Partial<UserProfile>;
@@ -14,14 +13,11 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
   const [name, setName] = useState(initialUser.name || "");
   const [myLanguage, setMyLanguage] = useState(initialUser.myLanguage || "Hindi");
   const [hearLanguage, setHearLanguage] = useState(initialUser.hearLanguage || "English");
-  const [selectedVoice, setSelectedVoice] = useState("Kore");
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
 
-  // Debounced check username
   useEffect(() => {
     if (!username || username.trim().length < 3) {
       setIsAvailable(null);
@@ -54,13 +50,6 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
 
     return () => clearTimeout(timer);
   }, [username]);
-
-  const handlePreviewVoice = async () => {
-    setIsPlayingPreview(true);
-    const sampleText = `Hello! This is LinguaCall with the ${selectedVoice} voice. Real-time translation ready.`;
-    speakText(sampleText, "English");
-    setTimeout(() => setIsPlayingPreview(false), 2000);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,23 +87,22 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
   };
 
   return (
-    <div className="min-h-[calc(100vh-5rem)] flex items-center justify-center p-4 bg-zinc-100 text-zinc-900">
-      <div className="w-full max-w-lg bg-white border-2 border-zinc-200 rounded-[2rem] p-6 sm:p-8 shadow-sm">
+    <div className="min-h-[calc(100vh-6rem)] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white border border-zinc-200 rounded-3xl p-6 sm:p-8 shadow-xs">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-3 text-xl font-bold shadow-md shadow-indigo-600/20 border border-indigo-700">
-            🌐
+          <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center font-bold text-base mx-auto mb-3">
+            L
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-zinc-900">Create Your Caller ID</h2>
-          <p className="text-xs text-zinc-500 font-medium mt-1">
-            Choose your unique username and configure your spoken and hearing languages.
+          <h2 className="text-lg font-bold tracking-tight text-zinc-900">Set Up Profile</h2>
+          <p className="text-xs text-zinc-500 mt-1">
+            Choose your username and default languages
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Display Name */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 mb-1">
-              Your Full Name
+            <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
+              Your Name
             </label>
             <input
               id="setup-fullname-input"
@@ -123,18 +111,17 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Ayush Gohil"
               required
-              className="w-full bg-zinc-50 border-2 border-zinc-200 text-zinc-900 px-3.5 py-2.5 rounded-xl text-xs outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium placeholder:text-zinc-400"
+              className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-3.5 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 focus:bg-white transition-colors"
             />
           </div>
 
-          {/* Username with real-time status */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 mb-1">
+            <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
               Unique Username (@)
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-                <AtSign className="w-4 h-4" />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
+                <AtSign className="w-3.5 h-3.5" />
               </div>
               <input
                 id="setup-username-input"
@@ -144,114 +131,61 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
                 placeholder="e.g. ayush_404"
                 maxLength={20}
                 required
-                className={`w-full bg-zinc-50 border-2 text-zinc-900 pl-10 pr-10 py-2.5 rounded-xl text-xs outline-none transition-all font-medium placeholder:text-zinc-400 ${
-                  isAvailable === true
-                    ? "border-emerald-500 focus:border-emerald-600 bg-white"
-                    : isAvailable === false
-                    ? "border-rose-500 focus:border-rose-600 bg-white"
-                    : "border-zinc-200 focus:border-indigo-600 focus:bg-white"
-                }`}
+                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 pl-9 pr-9 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 focus:bg-white transition-colors"
               />
-              <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center">
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                 {isChecking ? (
-                  <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 text-zinc-400 animate-spin" />
                 ) : isAvailable === true ? (
-                  <Check className="w-4 h-4 text-emerald-600" />
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
                 ) : isAvailable === false ? (
-                  <X className="w-4 h-4 text-rose-600" />
+                  <X className="w-3.5 h-3.5 text-rose-600" />
                 ) : null}
               </div>
             </div>
 
             {errorMessage ? (
-              <p className="text-[11px] font-semibold text-rose-600 mt-1">{errorMessage}</p>
+              <p className="text-[11px] text-rose-600 mt-1">{errorMessage}</p>
             ) : isAvailable === true ? (
-              <p className="text-[11px] font-bold text-emerald-600 mt-1">Username is available!</p>
-            ) : (
-              <p className="text-[11px] text-zinc-400 font-medium mt-1">
-                Others will use this to call and message you.
-              </p>
-            )}
+              <p className="text-[11px] text-emerald-600 mt-1">Username available</p>
+            ) : null}
           </div>
 
-          {/* Languages Setup */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 mb-1">
-                🗣️ I usually speak:
+              <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
+                I Speak
               </label>
               <select
                 id="setup-my-language"
                 value={myLanguage}
                 onChange={(e) => setMyLanguage(e.target.value)}
-                className="w-full bg-zinc-50 border-2 border-zinc-200 text-zinc-900 px-3 py-2.5 rounded-xl text-xs outline-none focus:border-indigo-600 focus:bg-white font-semibold cursor-pointer"
+                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-3 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 cursor-pointer"
               >
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={`my_${lang.code}`} value={lang.name}>
-                    {lang.flag} {lang.name} ({lang.native})
+                    {lang.flag} {lang.name}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 mb-1">
-                👂 I prefer to hear:
+              <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
+                I Hear
               </label>
               <select
                 id="setup-hear-language"
                 value={hearLanguage}
                 onChange={(e) => setHearLanguage(e.target.value)}
-                className="w-full bg-zinc-50 border-2 border-zinc-200 text-zinc-900 px-3 py-2.5 rounded-xl text-xs outline-none focus:border-indigo-600 focus:bg-white font-semibold cursor-pointer"
+                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-3 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 cursor-pointer"
               >
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={`hear_${lang.code}`} value={lang.name}>
-                    {lang.flag} {lang.name} ({lang.native})
+                    {lang.flag} {lang.name}
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
-
-          {/* Voice timbre selection */}
-          <div className="pt-2">
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-zinc-600 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Translated Voice Persona (Gemini TTS)</span>
-              </label>
-              <button
-                type="button"
-                onClick={handlePreviewVoice}
-                disabled={isPlayingPreview}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-                <span>{isPlayingPreview ? "Playing..." : "Preview"}</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: "Kore", label: "Kore", desc: "Warm & Natural" },
-                { id: "Puck", label: "Puck", desc: "Upbeat & Crisp" },
-                { id: "Fenrir", label: "Fenrir", desc: "Deep & Authoritative" },
-                { id: "Zephyr", label: "Zephyr", desc: "Smooth & Balanced" },
-                { id: "Charon", label: "Charon", desc: "Gentle & Calm" },
-              ].map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => setSelectedVoice(v.id)}
-                  className={`p-2.5 rounded-xl text-left border-2 text-xs transition-all cursor-pointer ${
-                    selectedVoice === v.id
-                      ? "bg-indigo-50 border-indigo-600 text-indigo-900 shadow-xs"
-                      : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:border-zinc-300"
-                  }`}
-                >
-                  <div className="font-bold">{v.label}</div>
-                  <div className="text-[10px] text-zinc-400 font-medium truncate">{v.desc}</div>
-                </button>
-              ))}
             </div>
           </div>
 
@@ -259,15 +193,12 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
             id="setup-confirm-btn"
             type="submit"
             disabled={!username.trim() || isAvailable === false || isSubmitting}
-            className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md border border-indigo-700 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="w-full mt-2 py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
             {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Creating Account...</span>
-              </>
+              <span>Saving...</span>
             ) : (
-              <span>Confirm & Enter LinguaCall</span>
+              <span>Confirm Profile</span>
             )}
           </button>
         </form>

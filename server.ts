@@ -58,6 +58,28 @@ interface UserProfile {
   lastActive: number;
 }
 
+// In-memory Translation Cache to conserve Gemini Free-Tier Quota (15 RPM)
+const translationCache = new Map<string, string>();
+const MAX_CACHE_SIZE = 1000;
+
+function getCacheKey(source: string, target: string, text: string): string {
+  return `${(source || "auto").toLowerCase()}_${(target || "en").toLowerCase()}_${text.trim().toLowerCase()}`;
+}
+
+function getCachedTranslation(source: string, target: string, text: string): string | null {
+  const key = getCacheKey(source, target, text);
+  return translationCache.get(key) || null;
+}
+
+function setCachedTranslation(source: string, target: string, text: string, translated: string) {
+  if (translationCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = translationCache.keys().next().value;
+    if (firstKey) translationCache.delete(firstKey);
+  }
+  const key = getCacheKey(source, target, text);
+  translationCache.set(key, translated);
+}
+
 const users = new Map<string, UserProfile>(); // username -> UserProfile
 const socketIdToUsername = new Map<string, string>();
 const rooms = new Map<string, { id: string; name: string; host: string; members: string[]; createdAt: number }>();
@@ -187,7 +209,7 @@ app.get("/api/users/search", (req, res) => {
   res.json({ users: list.slice(0, 15) });
 });
 
-// Text translation API (using gemini-3.8-flash)
+// Text translation API (using gemini-3.8-flash with in-memory caching and rate-limit guard)
 app.post("/api/translate-text", async (req, res) => {
   try {
     const { text, sourceLang, targetLang } = req.body;
@@ -196,34 +218,62 @@ app.post("/api/translate-text", async (req, res) => {
       return;
     }
 
+    const cleanText = String(text).trim();
+    if (!cleanText) {
+      res.json({ translatedText: "", detectedLang: sourceLang || "Auto" });
+      return;
+    }
+
+    // 1. Check in-memory cache first (0 API requests consumed)
+    const cached = getCachedTranslation(sourceLang, targetLang, cleanText);
+    if (cached) {
+      res.json({
+        translatedText: cached,
+        detectedLang: sourceLang || "Auto",
+        fromCache: true,
+      });
+      return;
+    }
+
     const ai = getAi();
     if (!ai) {
-      // Fallback simulated translation for offline/mock environments
       res.json({
-        translatedText: `[${targetLang}] ${text}`,
+        translatedText: `[${targetLang}] ${cleanText}`,
         detectedLang: sourceLang || "Auto",
       });
       return;
     }
 
-    const prompt = `Translate the following text into ${targetLang}.
-Preserve the tone, emotion, natural spoken style, and colloquialisms.
-Source language hint: ${sourceLang || "Auto-detect"}.
-Output ONLY the raw translated text without any explanation, quotes, or formatting.
+    try {
+      const prompt = `Translate the following text into ${targetLang}.
+Preserve tone and colloquial spoken flow.
+Output ONLY the translated sentence without quotation marks or explanations.
 
-Text to translate:
-"${text}"`;
+Text:
+"${cleanText}"`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-    });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: prompt,
+      });
 
-    const translatedText = response.text ? response.text.trim() : text;
-    res.json({
-      translatedText,
-      detectedLang: sourceLang || "Auto-detected",
-    });
+      const translatedText = (response.text || cleanText).trim();
+      setCachedTranslation(sourceLang, targetLang, cleanText, translatedText);
+
+      res.json({
+        translatedText,
+        detectedLang: sourceLang || "Auto",
+        fromCache: false,
+      });
+    } catch (apiErr: any) {
+      console.warn("Gemini translate error / quota limit:", apiErr?.message);
+      // Graceful fallback on 429 (ResourceExhausted) so call never breaks
+      res.json({
+        translatedText: cleanText,
+        detectedLang: sourceLang || "Auto",
+        rateLimited: true,
+      });
+    }
   } catch (error: any) {
     console.error("Text translation error:", error);
     res.status(500).json({ error: error.message || "Failed to translate" });
@@ -538,6 +588,50 @@ Return strictly JSON:
         targetLang,
         timestamp: Date.now(),
       });
+    }
+  });
+
+  // Low-quota real-time speech translation (Sentence-boundary translation with cache)
+  // Preserves Gemini Free Tier 15 RPM limits by avoiding continuous raw audio streaming
+  socket.on("call:speech_text", async ({ text, sourceLang, targetLang, targetSocketId, fromUsername }) => {
+    const cleanText = (text || "").trim();
+    if (!cleanText) return;
+
+    let translated = getCachedTranslation(sourceLang, targetLang, cleanText);
+    if (!translated) {
+      const ai = getAi();
+      if (ai) {
+        try {
+          const res = await ai.models.generateContent({
+            model: "gemini-3.8-flash",
+            contents: `Translate into ${targetLang || "English"}. Natural conversational tone. Output translated sentence only: "${cleanText}"`,
+          });
+          translated = (res.text || cleanText).trim();
+          setCachedTranslation(sourceLang, targetLang, cleanText, translated);
+        } catch (err: any) {
+          console.warn("Speech text translate quota / error:", err?.message);
+          translated = cleanText;
+        }
+      } else {
+        translated = cleanText;
+      }
+    }
+
+    const payload = {
+      original: cleanText,
+      translated: translated || cleanText,
+      fromUsername,
+      sourceLang,
+      targetLang,
+      timestamp: Date.now(),
+    };
+
+    // Send back to self
+    socket.emit("call:my_transcript", payload);
+
+    // Forward to remote peer
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("call:transcript", payload);
     }
   });
 
