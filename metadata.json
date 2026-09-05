@@ -1,0 +1,6 @@
+{
+  "name": "LinguaCall",
+  "description": "Full-stack real-time audio-to-audio translation calling web app powered by Gemini AI and WebRTC.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
