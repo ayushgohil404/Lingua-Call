@@ -3,14 +3,20 @@
 let audioCtx: AudioContext | null = null;
 
 export function getAudioContext(): AudioContext {
-  if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    audioCtx = new AudioContextClass();
+  try {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+      }
+    }
+    if (audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
+  } catch (e) {
+    console.warn("AudioContext init notice:", e);
   }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
-  return audioCtx;
+  return audioCtx as AudioContext;
 }
 
 // Play pleasant incoming call ringtone loop
@@ -21,7 +27,15 @@ let ringtoneInterval: number | null = null;
 export function startIncomingRingtone(): void {
   stopIncomingRingtone();
   try {
+    // Trigger vibration on mobile devices if supported
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      try {
+        navigator.vibrate([500, 250, 500, 250, 500]);
+      } catch {}
+    }
+
     const ctx = getAudioContext();
+    if (!ctx) return;
     const playChime = () => {
       const now = ctx.currentTime;
       // High note

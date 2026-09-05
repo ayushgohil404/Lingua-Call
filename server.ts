@@ -84,6 +84,20 @@ const users = new Map<string, UserProfile>(); // username -> UserProfile
 const socketIdToUsername = new Map<string, string>();
 const rooms = new Map<string, { id: string; name: string; host: string; members: string[]; createdAt: number }>();
 
+function findUser(target: string): UserProfile | undefined {
+  if (!target) return undefined;
+  const clean = target.trim().toLowerCase().replace(/^@/, "");
+  if (!clean) return undefined;
+  if (users.has(clean)) return users.get(clean);
+  for (const u of users.values()) {
+    if (u.username.toLowerCase() === clean) return u;
+    if (u.email && u.email.toLowerCase() === clean) return u;
+    if (u.email && u.email.split("@")[0].toLowerCase() === clean) return u;
+    if (u.userId === clean) return u;
+  }
+  return undefined;
+}
+
 // -------------------------------------------------------------
 // REST API ROUTES
 // -------------------------------------------------------------
@@ -343,14 +357,22 @@ io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
   // User online registration
-  socket.on("user:online", ({ username, userId, name, picture, myLanguage, hearLanguage }) => {
+  socket.on("user:online", ({ username, userId, name, picture, myLanguage, hearLanguage, email }) => {
     if (!username) return;
-    const cleanUsername = username.trim().toLowerCase();
+    const cleanUsername = username.trim().toLowerCase().replace(/^@/, "");
+    const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+
+    // Join room for reliable targeted messaging and calls across reconnects
+    socket.join(cleanUsername);
+    if (cleanEmail) {
+      socket.join(cleanEmail);
+    }
 
     const user: UserProfile = users.get(cleanUsername) || {
       userId: userId || `user_${Date.now()}`,
       username: cleanUsername,
       name: name || cleanUsername,
+      email: cleanEmail,
       picture: picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
       myLanguage: myLanguage || "English",
       hearLanguage: hearLanguage || "Hindi",
@@ -362,8 +384,11 @@ io.on("connection", (socket) => {
     user.online = true;
     user.socketId = socket.id;
     user.lastActive = Date.now();
+    if (name) user.name = name;
+    if (cleanEmail) user.email = cleanEmail;
     if (myLanguage) user.myLanguage = myLanguage;
     if (hearLanguage) user.hearLanguage = hearLanguage;
+    if (picture) user.picture = picture;
 
     users.set(cleanUsername, user);
     socketIdToUsername.set(socket.id, cleanUsername);
@@ -377,19 +402,12 @@ io.on("connection", (socket) => {
     socket.emit("users:list", Array.from(users.values()));
   });
 
-  // 1-to-1 Calling Signaling: Initiate
-  socket.on("call:initiate", ({ targetUsername, callerUsername, callerLanguage, callerName, callerPicture, offer, hearLanguage }) => {
-    const cleanTarget = (targetUsername || "").trim().toLowerCase();
-    const targetUser = users.get(cleanTarget);
+  // 1-to-1 Calling Signaling: Initiate & Start (support both event names)
+  const handleCallStart = ({ targetUsername, callerUsername, callerLanguage, callerName, callerPicture, offer, hearLanguage }: any) => {
+    const cleanTarget = (targetUsername || "").trim().toLowerCase().replace(/^@/, "");
+    const targetUser = findUser(cleanTarget);
 
-    if (!targetUser || !targetUser.socketId || !io.sockets.sockets.get(targetUser.socketId)) {
-      socket.emit("call:error", {
-        message: `@${cleanTarget} is currently offline or unavailable.`,
-      });
-      return;
-    }
-
-    io.to(targetUser.socketId).emit("call:incoming", {
+    const callPayload = {
       callerUsername,
       callerName: callerName || callerUsername,
       callerPicture: callerPicture || "",
@@ -397,8 +415,27 @@ io.on("connection", (socket) => {
       callerLanguage: callerLanguage || "English",
       hearLanguage: hearLanguage || "English",
       offer,
-    });
-  });
+    };
+
+    console.log(`Call initiated from @${callerUsername} to target "${cleanTarget}"`);
+
+    // Broadcast to target's room, target username, target email, and direct socket ID
+    io.to(cleanTarget).emit("call:incoming", callPayload);
+    if (targetUser) {
+      if (targetUser.username && targetUser.username !== cleanTarget) {
+        io.to(targetUser.username).emit("call:incoming", callPayload);
+      }
+      if (targetUser.email) {
+        io.to(targetUser.email.toLowerCase()).emit("call:incoming", callPayload);
+      }
+      if (targetUser.socketId && targetUser.socketId !== socket.id) {
+        io.to(targetUser.socketId).emit("call:incoming", callPayload);
+      }
+    }
+  };
+
+  socket.on("call:start", handleCallStart);
+  socket.on("call:initiate", handleCallStart);
 
   // Answer call
   socket.on("call:answer", ({ callerSocketId, answer, receiverLanguage, receiverUsername, receiverName, receiverPicture }) => {
@@ -592,23 +629,30 @@ Return strictly JSON:
 
   // 1-to-1 Chat Messages
   socket.on("chat:message", async ({ targetUsername, message, fromUsername, sourceLang, targetLang }) => {
-    const cleanTarget = (targetUsername || "").trim().toLowerCase();
-    const targetUser = users.get(cleanTarget);
+    if (!message || !message.trim()) return;
+    const cleanTarget = (targetUsername || "").trim().toLowerCase().replace(/^@/, "");
+    const cleanFrom = (fromUsername || "").trim().toLowerCase().replace(/^@/, "");
+    const targetUser = findUser(cleanTarget);
 
     let translatedMessage = message;
-    // Auto translate text if languages differ
-    if (sourceLang !== targetLang) {
+    // Auto translate text if languages differ (with timeout protection so message is never delayed or dropped)
+    if (sourceLang && targetLang && sourceLang !== targetLang) {
       const ai = getAi();
       if (ai) {
         try {
-          const res = await ai.models.generateContent({
+          const translateTask = ai.models.generateContent({
             model: "gemini-3.8-flash",
             contents: `Translate the following chat message into ${targetLang || "English"}.
 Maintain casual chat tone, emojis, and slang. Output only translated text.
 Message: "${message}"`,
           });
-          translatedMessage = res.text?.trim() || message;
-        } catch {
+          const timeoutTask = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
+          const res: any = await Promise.race([translateTask, timeoutTask]);
+          if (res?.text) {
+            translatedMessage = res.text.trim();
+          }
+        } catch (e) {
+          console.warn("Message translation fallback:", e);
           translatedMessage = message;
         }
       }
@@ -616,8 +660,8 @@ Message: "${message}"`,
 
     const payload = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      fromUsername,
-      targetUsername: cleanTarget,
+      fromUsername: cleanFrom || fromUsername,
+      targetUsername: targetUser?.username || cleanTarget,
       originalText: message,
       translatedText: translatedMessage,
       sourceLang,
@@ -625,11 +669,23 @@ Message: "${message}"`,
       timestamp: Date.now(),
     };
 
-    // Send to target if online
-    if (targetUser?.socketId) {
-      io.to(targetUser.socketId).emit("chat:message", payload);
+    console.log(`Delivering chat message from @${fromUsername} to target "${cleanTarget}"`);
+
+    // Send to target if online via room and direct socket
+    io.to(cleanTarget).emit("chat:message", payload);
+    if (targetUser) {
+      if (targetUser.username && targetUser.username !== cleanTarget) {
+        io.to(targetUser.username).emit("chat:message", payload);
+      }
+      if (targetUser.email) {
+        io.to(targetUser.email.toLowerCase()).emit("chat:message", payload);
+      }
+      if (targetUser.socketId && targetUser.socketId !== socket.id) {
+        io.to(targetUser.socketId).emit("chat:message", payload);
+      }
     }
-    // Echo back to sender for confirmation
+
+    // Echo back to sender for instant UI confirmation
     socket.emit("chat:message:sent", payload);
   });
 

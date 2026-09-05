@@ -60,6 +60,15 @@ export default function App() {
       setIncomingCall(data);
     };
 
+    const handleCallEnded = () => {
+      setIncomingCall(null);
+      setActiveCall(null);
+    };
+
+    const handleCallRejected = () => {
+      setIncomingCall(null);
+    };
+
     if (socket.connected) {
       handleConnect();
     }
@@ -69,6 +78,8 @@ export default function App() {
     socket.on("users:update", handleUsersUpdate);
     socket.on("users:list", handleUsersUpdate);
     socket.on("call:incoming", handleIncomingCall);
+    socket.on("call:ended", handleCallEnded);
+    socket.on("call:rejected", handleCallRejected);
 
     return () => {
       socket.off("connect", handleConnect);
@@ -76,6 +87,8 @@ export default function App() {
       socket.off("users:update", handleUsersUpdate);
       socket.off("users:list", handleUsersUpdate);
       socket.off("call:incoming", handleIncomingCall);
+      socket.off("call:ended", handleCallEnded);
+      socket.off("call:rejected", handleCallRejected);
     };
   }, [user]);
 

@@ -21,6 +21,7 @@ import {
   CheckCheck,
   UserPlus,
   ArrowRight,
+  ArrowLeft,
   Sparkles,
 } from "lucide-react";
 
@@ -45,6 +46,7 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
 
   // Active view tab
   const [activeView, setActiveView] = useState<"chats" | "calls">("chats");
+  const [mobileView, setMobileView] = useState<"contacts" | "chat">("contacts");
   const [searchQuery, setSearchQuery] = useState("");
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -166,6 +168,7 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
       setSelectedUser(existing);
       persistContact(existing);
       setSearchQuery("");
+      setMobileView("chat");
       return;
     }
 
@@ -185,6 +188,7 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
     persistContact(newContact);
     setSelectedUser(newContact);
     setSearchQuery("");
+    setMobileView("chat");
   };
 
   // Socket chat message handling
@@ -300,7 +304,7 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
       <div className="relative z-10 w-full max-w-7xl h-screen md:h-[calc(100vh-2rem)] bg-white md:rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-[#d1d7db]">
         
         {/* ================= LEFT SIDEBAR (SEARCH, CONTACTS, USER PROFILE) ================= */}
-        <div className="w-full md:w-[410px] bg-white border-r border-[#d1d7db] flex flex-col shrink-0 h-full">
+        <div className={`${mobileView === "chat" ? "hidden md:flex" : "flex"} w-full md:w-[410px] bg-white border-r border-[#d1d7db] flex-col shrink-0 h-full`}>
           
           {/* Top Sidebar Header */}
           <div className="h-16 bg-[#f0f2f5] px-4 flex items-center justify-between border-b border-[#e9edef] shrink-0">
@@ -475,6 +479,7 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
                     onClick={() => {
                       setSelectedUser(user);
                       persistContact(user);
+                      setMobileView("chat");
                     }}
                     className={`flex items-center justify-between px-3.5 py-3 hover:bg-[#f5f6f6] cursor-pointer transition-colors ${
                       isSelected ? "bg-[#f0f2f5]" : "bg-white"
@@ -522,6 +527,7 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
                         e.stopPropagation();
                         setSelectedUser(user);
                         persistContact(user);
+                        setMobileView("chat");
                         handleTriggerVoiceCall(user);
                       }}
                       className="ml-3 p-2.5 bg-[#00a884]/10 hover:bg-[#00a884] text-[#00a884] hover:text-white rounded-full transition-all duration-150 shrink-0 shadow-xs cursor-pointer active:scale-95"
@@ -570,15 +576,25 @@ export const LinguaCallLayout: React.FC<LinguaCallLayoutProps> = ({
         </div>
 
         {/* ================= RIGHT PANEL (CHAT SECTION & TOP-RIGHT CALL SECTION) ================= */}
-        <div className="flex-1 bg-[#efeae2] flex flex-col h-full relative overflow-hidden">
+        <div className={`${mobileView === "contacts" ? "hidden md:flex" : "flex"} flex-1 bg-[#efeae2] flex-col h-full relative overflow-hidden`}>
           {selectedUser ? (
             <>
               {/* Chat Top Header - WITH CALL SECTION AT RIGHT TOP */}
-              <div className="h-16 bg-[#f0f2f5] px-4 flex items-center justify-between border-b border-[#e9edef] shrink-0 z-10 shadow-sm">
+              <div className="h-16 bg-[#f0f2f5] px-3 sm:px-4 flex items-center justify-between border-b border-[#e9edef] shrink-0 z-10 shadow-sm">
                 
                 {/* User details on left */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="relative">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  {/* Mobile Back Button to Contacts */}
+                  <button
+                    id="chat-mobile-back-btn"
+                    onClick={() => setMobileView("contacts")}
+                    className="md:hidden p-1.5 -ml-1 text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] rounded-full cursor-pointer transition-colors shrink-0"
+                    title="Back to contacts list"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+
+                  <div className="relative shrink-0">
                     <img
                       src={selectedUser.picture}
                       alt={selectedUser.name}

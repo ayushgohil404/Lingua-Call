@@ -108,35 +108,49 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
 
     async function initCall() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-        localStreamRef.current = stream;
-
-        // Analyser for voice volume
+        let stream: MediaStream | null = null;
         try {
-          const ctx = getAudioContext();
-          const source = ctx.createMediaStreamSource(stream);
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 256;
-          source.connect(analyser);
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+        } catch {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (micErr) {
+            console.warn("Microphone not directly available:", micErr);
+          }
+        }
 
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
-          const checkVolume = () => {
-            if (!active) return;
-            analyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-            const avg = sum / dataArray.length;
-            setIsSelfSpeaking(avg > 18);
-            animFrameRef.current = requestAnimationFrame(checkVolume);
-          };
-          checkVolume();
-        } catch {}
+        if (stream) {
+          localStreamRef.current = stream;
+
+          // Analyser for voice volume
+          try {
+            const ctx = getAudioContext();
+            if (ctx) {
+              const source = ctx.createMediaStreamSource(stream);
+              const analyser = ctx.createAnalyser();
+              analyser.fftSize = 256;
+              source.connect(analyser);
+
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              const checkVolume = () => {
+                if (!active) return;
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                const avg = sum / dataArray.length;
+                setIsSelfSpeaking(avg > 18);
+                animFrameRef.current = requestAnimationFrame(checkVolume);
+              };
+              checkVolume();
+            }
+          } catch {}
+        }
 
         const pc = new RTCPeerConnection({
           iceServers: [
@@ -146,7 +160,9 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         });
         pcRef.current = pc;
 
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        if (stream) {
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream!));
+        }
 
         pc.ontrack = (event) => {
           if (remoteAudioRef.current && event.streams[0]) {
@@ -179,7 +195,7 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
 
-          socket.emit("call:start", {
+          const callPayload = {
             targetUsername: targetUser.username,
             callerUsername: currentUser.username,
             callerName: currentUser.name,
@@ -187,7 +203,11 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
             callerLanguage: myLang,
             hearLanguage: hearLang,
             offer,
-          });
+          };
+
+          // Emit both call:start and call:initiate to guarantee delivery
+          socket.emit("call:start", callPayload);
+          socket.emit("call:initiate", callPayload);
 
           setTimeout(() => {
             if (!isConnected && active) {
@@ -400,8 +420,8 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-      <div className="w-full h-full sm:h-[620px] sm:max-w-md bg-[#111b21] sm:rounded-3xl flex flex-col justify-between p-6 sm:p-8 relative text-white shadow-2xl overflow-hidden">
+    <div id="active-call-modal" className="fixed inset-0 z-[999] flex items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+      <div className="w-full h-[100dvh] sm:h-[620px] sm:max-w-md bg-[#111b21] sm:rounded-3xl flex flex-col justify-between p-4 sm:p-8 pb-8 sm:pb-8 relative text-white shadow-2xl overflow-hidden">
         <audio ref={remoteAudioRef} autoPlay playsInline />
 
         {/* Top Security & Status Header */}
