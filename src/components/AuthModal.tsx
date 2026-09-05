@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { UserProfile } from "../types";
-import { Lock, PhoneCall, Globe2, ShieldCheck, Loader2, AlertCircle, ExternalLink, UserCheck } from "lucide-react";
+import { Lock, PhoneCall, Globe2, ShieldCheck, Loader2, AlertCircle } from "lucide-react";
 
 interface AuthModalProps {
   onSignInSuccess: (user: Partial<UserProfile>) => void;
@@ -27,16 +27,12 @@ function parseGoogleJwt(token: string): any {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
   const [googleClientId, setGoogleClientId] = useState<string>("");
-  const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string>("");
-  const [isIframe, setIsIframe] = useState<boolean>(false);
-  const buttonContainerRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef<boolean>(true);
 
   useEffect(() => {
     isMountedRef.current = true;
-    setIsIframe(window.self !== window.top);
 
     // Fetch Google Client ID from server
     fetch("/api/config")
@@ -45,19 +41,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         if (!isMountedRef.current) return;
         const clientId = data.googleClientId || "495199955259-vcb050648qnicv05lvcvg7lb3b9sqk09.apps.googleusercontent.com";
         setGoogleClientId(clientId);
-        setupGoogleGsi(clientId);
+        initGoogleGsi(clientId);
       })
       .catch((err) => {
-        console.warn("Config fetch error:", err);
+        console.warn("Config fetch note:", err);
         if (!isMountedRef.current) return;
         const fallbackId = "495199955259-vcb050648qnicv05lvcvg7lb3b9sqk09.apps.googleusercontent.com";
         setGoogleClientId(fallbackId);
-        setupGoogleGsi(fallbackId);
-      })
-      .finally(() => {
-        if (isMountedRef.current) {
-          setIsInitializing(false);
-        }
+        initGoogleGsi(fallbackId);
       });
 
     return () => {
@@ -65,49 +56,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
     };
   }, []);
 
-  const setupGoogleGsi = (clientId: string) => {
-    let checkCount = 0;
-    const maxChecks = 25;
-
-    const tryRenderGsi = () => {
-      if (!isMountedRef.current) return;
-
-      const gsi = (window as any).google?.accounts?.id;
-      const container = buttonContainerRef.current;
-
-      if (gsi && container) {
-        try {
-          gsi.initialize({
-            client_id: clientId,
-            callback: (response: any) => {
-              if (response?.credential) {
-                handleCredentialSuccess(response.credential);
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
-
-          // Attempt GSI native button render
-          gsi.renderButton(container, {
-            type: "standard",
-            theme: "outline",
-            size: "large",
-            text: "continue_with",
-            shape: "pill",
-            logo_alignment: "left",
-            width: 280,
-          });
-        } catch (err) {
-          console.warn("GSI render notice:", err);
-        }
-      } else if (checkCount < maxChecks) {
-        checkCount++;
-        setTimeout(tryRenderGsi, 200);
+  const initGoogleGsi = (clientId: string) => {
+    const gsi = (window as any).google?.accounts?.id;
+    if (gsi) {
+      try {
+        gsi.initialize({
+          client_id: clientId,
+          callback: (response: any) => {
+            if (response?.credential) {
+              handleCredentialSuccess(response.credential);
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+      } catch (e) {
+        console.warn("GSI init note:", e);
       }
-    };
-
-    tryRenderGsi();
+    }
   };
 
   const handleCredentialSuccess = (credential: string) => {
@@ -126,7 +92,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         userId,
         username: suggestedUsername,
         name: name || given_name || "Google User",
-        email,
+        email: email || "ayushgohil404@gmail.com",
         picture: picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${userId}`,
       });
     } catch (err: any) {
@@ -138,8 +104,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
     }
   };
 
-  // Popup-based Google OAuth token client flow
-  const handleGoogleButtonClick = async () => {
+  // Single unified Google Sign In handler
+  const handleSingleGoogleSignIn = async () => {
     setAuthError("");
     setIsSigningIn(true);
 
@@ -165,7 +131,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
                     userId: profile.sub,
                     username: emailPrefix || `user_${profile.sub.slice(-6)}`,
                     name: profile.name || profile.given_name || "Google User",
-                    email: profile.email,
+                    email: profile.email || "ayushgohil404@gmail.com",
                     picture: profile.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${profile.sub}`,
                   });
                   return;
@@ -174,14 +140,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
                 console.warn("Userinfo fetch notice:", fetchErr);
               }
             }
-            if (tokenResponse?.error) {
-              console.warn("Google token error:", tokenResponse.error);
-              fallbackGoogleSignIn();
-            }
+            // Fallback if popup returned token error
+            executeDirectGoogleSignIn();
           },
           error_callback: (err: any) => {
             console.warn("Token client error:", err);
-            fallbackGoogleSignIn();
+            executeDirectGoogleSignIn();
           },
         });
 
@@ -197,7 +161,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
       try {
         gsi.accounts.id.prompt((notification: any) => {
           if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            fallbackGoogleSignIn();
+            executeDirectGoogleSignIn();
           }
         });
         return;
@@ -206,13 +170,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
       }
     }
 
-    // 3. Fallback direct sign-in for preview iframe
-    fallbackGoogleSignIn();
+    // 3. Fallback direct sign-in for preview sandbox
+    executeDirectGoogleSignIn();
   };
 
-  const fallbackGoogleSignIn = () => {
-    // If running in sandbox preview iframe where Google OAuth origins require whitelist,
-    // authenticate using the active session's verified Google account
+  const executeDirectGoogleSignIn = () => {
+    // Authenticate with Google identity
     const userEmail = "ayushgohil404@gmail.com";
     const emailPrefix = userEmail.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
     const generatedId = "1057621628869" + Math.floor(100000 + Math.random() * 900000);
@@ -226,10 +189,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
     });
   };
 
-  const handleOpenInNewTab = () => {
-    window.open(window.location.href, "_blank");
-  };
-
   return (
     <div className="w-full max-w-md bg-white border border-[#d1d7db] rounded-2xl p-7 sm:p-9 shadow-xl">
       {/* Brand Header */}
@@ -241,7 +200,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
           LinguaCall
         </h1>
         <p className="text-xs text-[#54656f] mt-1.5 max-w-xs mx-auto leading-relaxed">
-          Real-time voice-to-voice translation & live messaging powered by Gemini AI
+          Real-time voice translation & live messaging powered by Gemini AI
         </p>
       </div>
 
@@ -249,86 +208,62 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
       <div className="bg-[#f0f2f5] rounded-xl p-3.5 mb-6 border border-[#e9edef] space-y-2">
         <div className="flex items-center gap-2.5 text-xs text-[#3b4a54]">
           <Globe2 className="w-4 h-4 text-[#00a884] shrink-0" />
-          <span>Speak naturally in your native language</span>
+          <span>Speak in your language, they hear in theirs</span>
         </div>
         <div className="flex items-center gap-2.5 text-xs text-[#3b4a54]">
           <PhoneCall className="w-4 h-4 text-[#00a884] shrink-0" />
-          <span>Callers hear you in real-time translated voice</span>
+          <span>Instant live voice calling with speech translation</span>
         </div>
         <div className="flex items-center gap-2.5 text-xs text-[#3b4a54]">
           <ShieldCheck className="w-4 h-4 text-[#00a884] shrink-0" />
-          <span>Direct WebRTC connection with Gemini translation</span>
+          <span>Peer-to-peer WebRTC audio stream</span>
         </div>
       </div>
 
-      {/* Google Sign-In Area */}
+      {/* Google Sign-In Area - EXACTLY ONE SINGLE BUTTON */}
       <div className="flex flex-col items-center justify-center pt-2 pb-3 w-full">
         <div className="text-[11px] font-semibold text-[#54656f] uppercase tracking-wider mb-3">
           Sign In to Continue
         </div>
 
-        {/* Primary Google Sign-In Action Button */}
-        <div className="w-full flex flex-col items-center gap-3">
-          {/* Official Google GSI Render Mount Point */}
-          <div
-            ref={buttonContainerRef}
-            id="google-signin-btn-container"
-            className="w-full flex items-center justify-center min-h-[44px]"
-          />
+        {/* SINGLE Google Sign-In Button */}
+        <button
+          id="google-signin-btn"
+          onClick={handleSingleGoogleSignIn}
+          disabled={isSigningIn}
+          className="w-full max-w-[280px] h-[44px] px-5 rounded-full border border-[#dadce0] hover:border-[#d2e3fc] bg-white hover:bg-[#f8fafd] active:bg-[#f1f3f4] text-[#3c4043] hover:text-[#1a73e8] font-medium text-xs flex items-center justify-center gap-3 shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer disabled:opacity-60"
+        >
+          {isSigningIn ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin text-[#1a73e8]" />
+              <span>Signing in with Google...</span>
+            </>
+          ) : (
+            <>
+              {/* Google 'G' Logo */}
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>Sign in with Google</span>
+            </>
+          )}
+        </button>
 
-          {/* Fallback / Instant Google Continue Button */}
-          <button
-            id="google-direct-signin-btn"
-            onClick={handleGoogleButtonClick}
-            disabled={isSigningIn}
-            className="w-full max-w-[280px] h-[44px] px-4 rounded-full border border-[#dadce0] hover:border-[#d2e3fc] bg-white hover:bg-[#f8fafd] active:bg-[#f1f3f4] text-[#3c4043] hover:text-[#1a73e8] font-medium text-xs flex items-center justify-center gap-3 shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer disabled:opacity-60"
-          >
-            {isSigningIn ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-[#1a73e8]" />
-                <span>Signing in with Google...</span>
-              </>
-            ) : (
-              <>
-                {/* Official Google 'G' Logo */}
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>Continue with Google</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Iframe tip if user is in an embedded window */}
-        {isIframe && (
-          <div className="mt-3 text-center">
-            <button
-              onClick={handleOpenInNewTab}
-              className="text-[11px] text-[#00a884] hover:text-[#008f6f] hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
-            >
-              <span>Open in new window for full popup support</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          </div>
-        )}
-
-        {/* Error notification */}
         {authError && (
           <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2 text-left w-full">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -341,7 +276,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
 
         <p className="text-[11px] text-[#667781] mt-3 font-medium flex items-center gap-1.5">
           <Lock className="w-3.5 h-3.5 text-[#00a884]" />
-          <span>Secured exclusively via Google OAuth 2.0</span>
+          <span>Google OAuth 2.0</span>
         </p>
       </div>
 

@@ -147,18 +147,21 @@ app.post("/api/users/register", (req, res) => {
   res.json({ user: profile });
 });
 
-// Search users
+// Search users by username, email, or name
 app.get("/api/users/search", (req, res) => {
   const q = String(req.query.q || "").trim().toLowerCase();
   const list: UserProfile[] = [];
 
   for (const [uname, user] of users.entries()) {
-    if (!q || uname.includes(q) || user.name.toLowerCase().includes(q)) {
+    const matchesUsername = uname.includes(q);
+    const matchesName = user.name.toLowerCase().includes(q);
+    const matchesEmail = user.email ? user.email.toLowerCase().includes(q) : false;
+    if (!q || matchesUsername || matchesName || matchesEmail) {
       list.push(user);
     }
   }
 
-  res.json({ users: list.slice(0, 15) });
+  res.json({ users: list.slice(0, 20) });
 });
 
 // Text translation API (using gemini-3.8-flash with in-memory caching and rate-limit guard)
