@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { UserProfile } from "../types";
 import { SUPPORTED_LANGUAGES } from "../constants/languages";
-import { AtSign, Check, X, Loader2 } from "lucide-react";
+import { AtSign, Check, X, Loader2, PhoneCall, CheckCircle2 } from "lucide-react";
 
 interface UsernameSetupProps {
   initialUser: Partial<UserProfile>;
@@ -62,7 +62,7 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
         username: username.trim().toLowerCase(),
         name: name.trim() || username.trim(),
         email: initialUser.email,
-        picture: initialUser.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${username.trim()}`,
+        picture: initialUser.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${username.trim()}`,
         myLanguage,
         hearLanguage,
       };
@@ -87,122 +87,140 @@ export const UsernameSetup: React.FC<UsernameSetupProps> = ({ initialUser, onCom
   };
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white border border-zinc-200 rounded-3xl p-6 sm:p-8 shadow-xs">
-        <div className="text-center mb-6">
-          <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center font-bold text-base mx-auto mb-3">
-            L
+    <div className="w-full max-w-md bg-white border border-[#d1d7db] rounded-2xl p-6 sm:p-8 shadow-xl">
+      <div className="text-center mb-6">
+        <div className="w-14 h-14 rounded-full bg-[#00a884] text-white flex items-center justify-center mx-auto mb-3 shadow-md">
+          <PhoneCall className="w-7 h-7" />
+        </div>
+        <h2 className="text-lg font-semibold tracking-tight text-[#111b21]">Setup LinguaCall Profile</h2>
+        <p className="text-xs text-[#667781] mt-1">
+          Confirm your handle and preferred languages for live translation
+        </p>
+      </div>
+
+      {initialUser.email && (
+        <div className="mb-4 py-2 px-3 bg-[#f0f2f5] rounded-xl border border-[#e9edef] flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 truncate text-[#3b4a54]">
+            {initialUser.picture ? (
+              <img
+                src={initialUser.picture}
+                alt="Google avatar"
+                className="w-5 h-5 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : null}
+            <span className="truncate">{initialUser.email}</span>
           </div>
-          <h2 className="text-lg font-bold tracking-tight text-zinc-900">Set Up Profile</h2>
-          <p className="text-xs text-zinc-500 mt-1">
-            Choose your username and default languages
-          </p>
+          <span className="flex items-center gap-1 text-[11px] font-medium text-[#00a884] shrink-0">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Google Verified</span>
+          </span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-[11px] font-semibold text-[#54656f] uppercase mb-1">
+            Display Name
+          </label>
+          <input
+            id="setup-fullname-input"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Ayush Gohil"
+            required
+            className="w-full bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] px-3.5 py-2 rounded-xl text-xs outline-none focus:border-[#00a884] focus:bg-white transition-colors font-medium"
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
-              Your Name
-            </label>
+        <div>
+          <label className="block text-[11px] font-semibold text-[#54656f] uppercase mb-1">
+            Unique Handle (@)
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#667781]">
+              <AtSign className="w-3.5 h-3.5" />
+            </div>
             <input
-              id="setup-fullname-input"
+              id="setup-username-input"
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Ayush Gohil"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="e.g. ayush404"
+              maxLength={20}
               required
-              className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-3.5 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 focus:bg-white transition-colors"
+              className="w-full bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] pl-9 pr-9 py-2 rounded-xl text-xs outline-none focus:border-[#00a884] focus:bg-white transition-colors font-medium"
             />
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+              {isChecking ? (
+                <Loader2 className="w-3.5 h-3.5 text-[#00a884] animate-spin" />
+              ) : isAvailable === true ? (
+                <Check className="w-3.5 h-3.5 text-[#00a884]" />
+              ) : isAvailable === false ? (
+                <X className="w-3.5 h-3.5 text-rose-600" />
+              ) : null}
+            </div>
+          </div>
+
+          {errorMessage ? (
+            <p className="text-[11px] text-rose-600 mt-1">{errorMessage}</p>
+          ) : isAvailable === true ? (
+            <p className="text-[11px] text-[#00a884] mt-1 font-medium">Username available</p>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div>
+            <label className="block text-[11px] font-semibold text-[#54656f] uppercase mb-1">
+              🗣️ I Speak
+            </label>
+            <select
+              id="setup-my-language"
+              value={myLanguage}
+              onChange={(e) => setMyLanguage(e.target.value)}
+              className="w-full bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] px-3 py-2 rounded-xl text-xs outline-none focus:border-[#00a884] cursor-pointer font-medium"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={`my_${lang.code}`} value={lang.name}>
+                  {lang.flag} {lang.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
-              Unique Username (@)
+            <label className="block text-[11px] font-semibold text-[#54656f] uppercase mb-1">
+              👂 I Hear
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
-                <AtSign className="w-3.5 h-3.5" />
-              </div>
-              <input
-                id="setup-username-input"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. ayush_404"
-                maxLength={20}
-                required
-                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 pl-9 pr-9 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 focus:bg-white transition-colors"
-              />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                {isChecking ? (
-                  <Loader2 className="w-3.5 h-3.5 text-zinc-400 animate-spin" />
-                ) : isAvailable === true ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                ) : isAvailable === false ? (
-                  <X className="w-3.5 h-3.5 text-rose-600" />
-                ) : null}
-              </div>
-            </div>
-
-            {errorMessage ? (
-              <p className="text-[11px] text-rose-600 mt-1">{errorMessage}</p>
-            ) : isAvailable === true ? (
-              <p className="text-[11px] text-emerald-600 mt-1">Username available</p>
-            ) : null}
+            <select
+              id="setup-hear-language"
+              value={hearLanguage}
+              onChange={(e) => setHearLanguage(e.target.value)}
+              className="w-full bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] px-3 py-2 rounded-xl text-xs outline-none focus:border-[#00a884] cursor-pointer font-medium"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={`hear_${lang.code}`} value={lang.name}>
+                  {lang.flag} {lang.name}
+                </option>
+              ))}
+            </select>
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <div>
-              <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
-                I Speak
-              </label>
-              <select
-                id="setup-my-language"
-                value={myLanguage}
-                onChange={(e) => setMyLanguage(e.target.value)}
-                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-3 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 cursor-pointer"
-              >
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <option key={`my_${lang.code}`} value={lang.name}>
-                    {lang.flag} {lang.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-zinc-500 uppercase mb-1">
-                I Hear
-              </label>
-              <select
-                id="setup-hear-language"
-                value={hearLanguage}
-                onChange={(e) => setHearLanguage(e.target.value)}
-                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-3 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 cursor-pointer"
-              >
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <option key={`hear_${lang.code}`} value={lang.name}>
-                    {lang.flag} {lang.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <button
-            id="setup-confirm-btn"
-            type="submit"
-            disabled={!username.trim() || isAvailable === false || isSubmitting}
-            className="w-full mt-2 py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-          >
-            {isSubmitting ? (
-              <span>Saving...</span>
-            ) : (
-              <span>Confirm Profile</span>
-            )}
-          </button>
-        </form>
-      </div>
+        <button
+          id="setup-confirm-btn"
+          type="submit"
+          disabled={!username.trim() || isAvailable === false || isSubmitting}
+          className="w-full mt-2 py-2.5 bg-[#00a884] hover:bg-[#008f6f] disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+        >
+          {isSubmitting ? (
+            <span>Saving...</span>
+          ) : (
+            <span>Start LinguaCall</span>
+          )}
+        </button>
+      </form>
     </div>
   );
 };

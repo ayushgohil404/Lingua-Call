@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { UserProfile, LiveTranscriptItem } from "../types";
-import { getLanguageByName, SUPPORTED_LANGUAGES } from "../constants/languages";
+import { getLanguageByName } from "../constants/languages";
 import { getSocket } from "../services/socket";
 import { speakText, playConnectedChime, playEndCallChime, getAudioContext } from "../services/audio";
 import {
@@ -10,6 +10,7 @@ import {
   Volume2,
   VolumeX,
   Subtitles,
+  Lock,
 } from "lucide-react";
 
 interface ActiveCallModalProps {
@@ -58,13 +59,13 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
 }) => {
   const socket = getSocket();
 
-  const [myLang, setMyLang] = useState(initialMyLang || currentUser.myLanguage);
-  const [hearLang, setHearLang] = useState(initialHearLang || currentUser.hearLanguage);
+  const [myLang] = useState(initialMyLang || currentUser.myLanguage);
+  const [hearLang] = useState(initialHearLang || currentUser.hearLanguage);
 
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(true);
-  const [callStatus, setCallStatus] = useState<string>("Connecting call...");
+  const [callStatus, setCallStatus] = useState<string>("Ringing...");
   const [isConnected, setIsConnected] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
 
@@ -81,8 +82,8 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   const animFrameRef = useRef<number | null>(null);
   const recognitionRef = useRef<any>(null);
 
+  const targetLangObj = getLanguageByName(targetUser.myLanguage || "Spanish");
   const myLangObj = getLanguageByName(myLang);
-  const hearLangObj = getLanguageByName(hearLang);
 
   // Call timer
   useEffect(() => {
@@ -102,13 +103,11 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  // WebRTC Connection Setup
   useEffect(() => {
     let active = true;
 
     async function initCall() {
       try {
-        // Request Microphone
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -118,7 +117,7 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         });
         localStreamRef.current = stream;
 
-        // Audio volume meter for speech ring animation
+        // Analyser for voice volume
         try {
           const ctx = getAudioContext();
           const source = ctx.createMediaStreamSource(stream);
@@ -139,7 +138,6 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
           checkVolume();
         } catch {}
 
-        // WebRTC PeerConnection
         const pc = new RTCPeerConnection({
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
@@ -148,9 +146,7 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         });
         pcRef.current = pc;
 
-        stream.getTracks().forEach((track) => {
-          pc.addTrack(track, stream);
-        });
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
         pc.ontrack = (event) => {
           if (remoteAudioRef.current && event.streams[0]) {
@@ -170,17 +166,16 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
 
         pc.onconnectionstatechange = () => {
           if (pc.connectionState === "connected") {
-            setCallStatus("Connected · AI Interpreting");
+            setCallStatus("Connected");
             setIsConnected(true);
             playConnectedChime();
           } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-            setCallStatus("Call disconnected");
+            setCallStatus("Call ended");
           }
         };
 
-        // Start call as Caller or Answer as Receiver
         if (role === "caller") {
-          setCallStatus(`Calling @${targetUser.username}...`);
+          setCallStatus("Ringing...");
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
 
@@ -194,15 +189,14 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
             offer,
           });
 
-          // Timeout if no answer in 30s
           setTimeout(() => {
             if (!isConnected && active) {
-              setCallStatus("No answer. User might be away.");
+              setCallStatus("Unavailable");
               setTimeout(onEndCall, 2500);
             }
           }, 30000);
         } else if (role === "receiver") {
-          setCallStatus("Connecting audio...");
+          setCallStatus("Connecting...");
           if (incomingOffer) {
             await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
             const answer = await pc.createAnswer();
@@ -218,40 +212,33 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
             });
 
             setIsConnected(true);
-            setCallStatus("Connected · AI Interpreting");
+            setCallStatus("Connected");
             playConnectedChime();
           }
         } else {
-          // Demo AI contact
           setIsConnected(true);
-          setCallStatus("Connected · AI Interpreting");
+          setCallStatus("Connected");
           playConnectedChime();
         }
 
-        // Initialize Low-Quota Native Speech Recognition
+        // Native Speech Recognition
         startSpeechRecognition();
       } catch (err: any) {
-        console.error("Init call error:", err);
-        setCallStatus(`Mic error: ${err.message || "Permission required"}`);
+        setCallStatus("Microphone error");
       }
     }
 
-    // Native Browser Speech Recognition (0 API calls, unlimited usage)
     function startSpeechRecognition() {
       const SpeechRecognitionClass =
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-      if (!SpeechRecognitionClass) {
-        console.info("Web Speech Recognition not supported in this browser. Falling back to text/audio.");
-        return;
-      }
+      if (!SpeechRecognitionClass) return;
 
       try {
         const recognition = new SpeechRecognitionClass();
         recognition.continuous = true;
         recognition.interimResults = false;
-        const code = LANG_CODE_MAP[myLang.toLowerCase()] || "en-US";
-        recognition.lang = code;
+        recognition.lang = LANG_CODE_MAP[myLang.toLowerCase()] || "en-US";
         recognitionRef.current = recognition;
 
         let lastTranscript = "";
@@ -263,8 +250,6 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
               const text = event.results[i][0].transcript.trim();
               if (text && text !== lastTranscript) {
                 lastTranscript = text;
-
-                // Send sentence for translation (1 sentence = 1 translation, perfectly within 15 RPM!)
                 socket.emit("call:speech_text", {
                   text,
                   sourceLang: myLang,
@@ -272,18 +257,9 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
                   targetSocketId: remoteSocketIdRef.current,
                   fromUsername: currentUser.username,
                 });
-
-                // Trigger AI partner reply if calling a demo user
-                if (targetUser.userId?.startsWith("demo_")) {
-                  triggerAiDemoResponse(text);
-                }
               }
             }
           }
-        };
-
-        recognition.onerror = () => {
-          // Keep silent and recover
         };
 
         recognition.onend = () => {
@@ -295,20 +271,17 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
         };
 
         recognition.start();
-      } catch (e) {
-        console.warn("Speech recognition initialization note:", e);
-      }
+      } catch {}
     }
 
     initCall();
 
-    // Socket Event Listeners
     const handleCallAnswered = async (data: any) => {
       if (pcRef.current && data.answer) {
         remoteSocketIdRef.current = data.answererSocketId;
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
         setIsConnected(true);
-        setCallStatus("Connected · AI Interpreting");
+        setCallStatus("Connected");
         playConnectedChime();
       }
     };
@@ -324,19 +297,18 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
     const handleCallEnded = () => {
       setCallStatus("Call ended");
       playEndCallChime();
-      setTimeout(onEndCall, 1200);
+      setTimeout(onEndCall, 1000);
     };
 
     const handleCallRejected = (data: any) => {
-      setCallStatus(data?.reason || "Call declined");
+      setCallStatus(data?.reason || "Declined");
       playEndCallChime();
-      setTimeout(onEndCall, 2000);
+      setTimeout(onEndCall, 1500);
     };
 
-    // My translated transcript
     const handleMyTranscript = (data: any) => {
       setTranscripts((prev) => [
-        ...prev.slice(-10),
+        ...prev.slice(-6),
         {
           id: `tr_self_${Date.now()}`,
           speaker: "You",
@@ -350,10 +322,9 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
       ]);
     };
 
-    // Incoming transcript from other caller
     const handleIncomingTranscript = (data: any) => {
       setTranscripts((prev) => [
-        ...prev.slice(-10),
+        ...prev.slice(-6),
         {
           id: `tr_${Date.now()}_${Math.random()}`,
           speaker: data.fromUsername || targetUser.name || targetUser.username,
@@ -369,7 +340,6 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
       setIsRemoteSpeaking(true);
       setTimeout(() => setIsRemoteSpeaking(false), 2200);
 
-      // Play translated audio via free Web Speech Synthesis (0 API requests)
       if (!isSpeakerMuted && data.translated) {
         speakText(data.translated, hearLang);
       }
@@ -386,13 +356,11 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
       active = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch {}
       }
-
       socket.off("call:answered", handleCallAnswered);
       socket.off("ice:candidate", handleIceCandidate);
       socket.off("call:ended", handleCallEnded);
@@ -408,45 +376,6 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
       }
     };
   }, []);
-
-  // Demo user AI responder
-  const triggerAiDemoResponse = async (spokenText: string) => {
-    setTimeout(async () => {
-      try {
-        setIsRemoteSpeaking(true);
-        const res = await fetch("/api/translate-text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            text: `Reply in 1 sentence to: "${spokenText}"`,
-            sourceLang: "English",
-            targetLang: myLang,
-          }),
-        });
-        const data = await res.json();
-        const reply = data.translatedText || "I understand and hear you clearly!";
-
-        setTranscripts((prev) => [
-          ...prev.slice(-10),
-          {
-            id: `demo_${Date.now()}`,
-            speaker: targetUser.name,
-            originalText: `Response`,
-            translatedText: reply,
-            sourceLang: targetUser.myLanguage,
-            targetLang: myLang,
-            timestamp: Date.now(),
-            isSelf: false,
-          },
-        ]);
-
-        if (!isSpeakerMuted) {
-          speakText(reply, myLang);
-        }
-        setTimeout(() => setIsRemoteSpeaking(false), 2200);
-      } catch {}
-    }, 1200);
-  };
 
   const toggleMute = () => {
     if (localStreamRef.current) {
@@ -471,153 +400,125 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 flex flex-col shadow-2xl border border-zinc-200 relative text-zinc-900">
-        {/* Hidden Remote Audio */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+      <div className="w-full h-full sm:h-[620px] sm:max-w-md bg-[#111b21] sm:rounded-3xl flex flex-col justify-between p-6 sm:p-8 relative text-white shadow-2xl overflow-hidden">
         <audio ref={remoteAudioRef} autoPlay playsInline />
 
-        {/* Minimalist Header */}
-        <div className="flex items-center justify-between pb-6 border-b border-zinc-100">
-          <div>
-            <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">LinguaCall Live</div>
-            <div className="text-sm font-bold text-zinc-800 flex items-center gap-2 mt-0.5">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-              <span>{callStatus}</span>
-            </div>
+        {/* Top Security & Status Header */}
+        <div className="text-center pt-2">
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#8696a0] font-medium tracking-wide">
+            <Lock className="w-3 h-3 text-[#00a884]" />
+            <span>End-to-end encrypted · LinguaCall Voice</span>
           </div>
 
-          <div className="text-right">
-            <span className="text-xs font-mono font-bold bg-zinc-100 px-3 py-1.5 rounded-full text-zinc-700">
-              {formatTimer(callDuration)}
-            </span>
-          </div>
-        </div>
+          <h2 className="text-2xl font-semibold text-[#e9edef] mt-3">
+            {targetUser.name || `@${targetUser.username}`}
+          </h2>
 
-        {/* Minimalist Participants Section */}
-        <div className="py-8 flex items-center justify-around">
-          {/* Self */}
-          <div className="flex flex-col items-center gap-2.5">
-            <div
-              className={`relative w-24 h-24 rounded-full p-0.5 transition-all duration-300 ${
-                isSelfSpeaking ? "ring-4 ring-indigo-500 scale-105" : "ring-1 ring-zinc-200"
-              }`}
-            >
-              <img
-                src={currentUser.picture}
-                alt={currentUser.name}
-                className="w-full h-full rounded-full object-cover bg-zinc-100"
-              />
-              {isMuted && (
-                <div className="absolute bottom-0 right-0 p-1.5 bg-rose-600 rounded-full text-white shadow-xs">
-                  <MicOff className="w-3.5 h-3.5" />
-                </div>
-              )}
-            </div>
-            <div className="text-center">
-              <div className="text-xs font-bold text-zinc-900">You</div>
-              <div className="text-[11px] text-zinc-500 font-medium">
-                {myLangObj.flag} {myLangObj.name}
-              </div>
-            </div>
+          <div className="text-sm font-medium text-[#8696a0] mt-1">
+            {isConnected ? formatTimer(callDuration) : callStatus}
           </div>
 
-          {/* Simple divider arrow */}
-          <div className="text-zinc-300 font-bold text-sm">➔</div>
-
-          {/* Remote */}
-          <div className="flex flex-col items-center gap-2.5">
-            <div
-              className={`relative w-24 h-24 rounded-full p-0.5 transition-all duration-300 ${
-                isRemoteSpeaking ? "ring-4 ring-emerald-500 scale-105" : "ring-1 ring-zinc-200"
-              }`}
-            >
-              <img
-                src={targetUser.picture}
-                alt={targetUser.name}
-                className="w-full h-full rounded-full object-cover bg-zinc-100"
-              />
-            </div>
-            <div className="text-center">
-              <div className="text-xs font-bold text-zinc-900">{targetUser.name || `@${targetUser.username}`}</div>
-              <div className="text-[11px] text-zinc-500 font-medium">
-                {hearLangObj.flag} {hearLangObj.name}
-              </div>
-            </div>
+          {/* Language badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#202c33] rounded-full text-xs text-[#aebac1] mt-3">
+            <span>You: {myLangObj.flag} {myLangObj.name}</span>
+            <span className="text-[#00a884]">➔</span>
+            <span>{targetLangObj.flag} {targetLangObj.name}</span>
           </div>
         </div>
 
-        {/* Minimal Live Subtitle Stream */}
-        {showSubtitles && (
-          <div className="bg-zinc-50 rounded-2xl p-3.5 border border-zinc-200 min-h-[90px] max-h-[140px] overflow-y-auto flex flex-col gap-2 mb-6">
-            {transcripts.length === 0 ? (
-              <div className="text-center py-4 text-xs text-zinc-400 italic">
-                Speak normally. Your speech will be translated live without hitting AI rate limits...
-              </div>
-            ) : (
-              transcripts.map((t) => (
-                <div
-                  key={t.id}
-                  className={`text-xs p-2 rounded-xl ${
-                    t.isSelf ? "bg-white border border-zinc-200 text-zinc-900" : "bg-indigo-50/70 border border-indigo-100 text-zinc-900"
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-[10px] text-zinc-400 font-semibold mb-0.5">
-                    <span>{t.speaker}</span>
-                    <span className="uppercase">{t.targetLang}</span>
-                  </div>
-                  <div className="font-semibold text-zinc-900">{t.translatedText}</div>
-                </div>
-              ))
+        {/* Center Contact Avatar & Audio Ripple Indicator */}
+        <div className="flex flex-col items-center justify-center my-auto py-6">
+          <div className="relative flex items-center justify-center">
+            {/* Pulsing ring when remote or self is speaking */}
+            {isRemoteSpeaking && (
+              <div className="absolute -inset-4 rounded-full border-2 border-[#00a884] animate-ping opacity-50" />
             )}
+            {isSelfSpeaking && (
+              <div className="absolute -inset-2 rounded-full border-2 border-emerald-400/60 animate-pulse" />
+            )}
+
+            <img
+              src={targetUser.picture}
+              alt={targetUser.name}
+              className="w-32 h-32 rounded-full object-cover border-4 border-[#202c33] shadow-xl"
+            />
+          </div>
+
+          {isRemoteSpeaking && (
+            <span className="mt-4 text-xs font-semibold text-[#00a884] bg-[#202c33] px-3 py-1 rounded-full animate-pulse">
+              Speaking in {targetLangObj.name}...
+            </span>
+          )}
+        </div>
+
+        {/* Live Subtitle Transcript */}
+        {showSubtitles && (
+          <div className="mb-4 max-h-32 overflow-y-auto space-y-2 px-1">
+            {transcripts.map((t) => (
+              <div
+                key={t.id}
+                className={`p-2.5 rounded-2xl text-xs ${
+                  t.isSelf
+                    ? "bg-[#005c4b] text-[#e9edef] ml-8 rounded-tr-none"
+                    : "bg-[#202c33] text-[#e9edef] mr-8 rounded-tl-none"
+                }`}
+              >
+                <div className="text-[10px] text-[#8696a0] mb-0.5">
+                  {t.isSelf ? "You" : targetUser.name}
+                </div>
+                <div className="font-medium leading-relaxed">{t.translatedText}</div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Minimal Controls Dock */}
-        <div className="flex items-center justify-center gap-3 pt-2">
-          {/* Mute */}
-          <button
-            id="call-mute-toggle-btn"
-            onClick={toggleMute}
-            title={isMuted ? "Unmute Mic" : "Mute Mic"}
-            className={`p-3.5 rounded-full border transition-all cursor-pointer ${
-              isMuted ? "bg-rose-50 text-rose-600 border-rose-200" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-200"
-            }`}
-          >
-            {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-          </button>
-
+        {/* Bottom Call Controls Dock */}
+        <div className="bg-[#202c33] rounded-3xl p-4 flex items-center justify-around shadow-lg">
           {/* Speaker */}
           <button
             id="call-speaker-toggle-btn"
             onClick={toggleSpeaker}
-            title={isSpeakerMuted ? "Unmute Speaker" : "Mute Speaker"}
-            className={`p-3.5 rounded-full border transition-all cursor-pointer ${
-              isSpeakerMuted ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-200"
+            className={`p-3.5 rounded-full transition-colors cursor-pointer ${
+              isSpeakerMuted ? "bg-red-500/20 text-red-400" : "bg-[#111b21] hover:bg-[#2a3942] text-[#e9edef]"
             }`}
+            title="Speaker"
           >
-            {isSpeakerMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            {isSpeakerMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
           </button>
 
           {/* Subtitles */}
           <button
             id="call-subtitles-toggle-btn"
             onClick={() => setShowSubtitles(!showSubtitles)}
-            title="Toggle Subtitles"
-            className={`p-3.5 rounded-full border transition-all cursor-pointer ${
-              showSubtitles ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-zinc-100 text-zinc-400 border-zinc-200"
+            className={`p-3.5 rounded-full transition-colors cursor-pointer ${
+              showSubtitles ? "bg-[#00a884] text-white" : "bg-[#111b21] text-[#8696a0]"
             }`}
+            title="Live Captions"
           >
-            <Subtitles className="w-5 h-5" />
+            <Subtitles className="w-6 h-6" />
           </button>
 
-          {/* End Call */}
+          {/* Mute */}
+          <button
+            id="call-mute-toggle-btn"
+            onClick={toggleMute}
+            className={`p-3.5 rounded-full transition-colors cursor-pointer ${
+              isMuted ? "bg-red-500/20 text-red-400" : "bg-[#111b21] hover:bg-[#2a3942] text-[#e9edef]"
+            }`}
+            title="Mute Microphone"
+          >
+            {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          </button>
+
+          {/* Red End Call Button */}
           <button
             id="call-end-call-btn"
             onClick={handleEndCall}
+            className="p-3.5 bg-[#ea0038] hover:bg-[#d00032] text-white rounded-full transition-transform active:scale-95 shadow-md cursor-pointer"
             title="End Call"
-            className="p-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full transition-all shadow-sm cursor-pointer ml-2"
           >
-            <PhoneOff className="w-5 h-5" />
+            <PhoneOff className="w-6 h-6" />
           </button>
         </div>
       </div>

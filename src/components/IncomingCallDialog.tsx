@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { SUPPORTED_LANGUAGES, getLanguageByName } from "../constants/languages";
 import { startIncomingRingtone, stopIncomingRingtone } from "../services/audio";
-import { PhoneCall, PhoneOff } from "lucide-react";
+import { Phone, PhoneOff, Lock } from "lucide-react";
 
 interface IncomingCallData {
   callerUsername: string;
@@ -26,7 +26,9 @@ export const IncomingCallDialog: React.FC<IncomingCallDialogProps> = ({
   onAccept,
   onReject,
 }) => {
-  const [selectedHearLanguage, setSelectedHearLanguage] = useState(defaultHearLanguage || "English");
+  const [selectedHearLanguage, setSelectedHearLanguage] = useState(
+    defaultHearLanguage || "English"
+  );
 
   useEffect(() => {
     startIncomingRingtone();
@@ -48,38 +50,44 @@ export const IncomingCallDialog: React.FC<IncomingCallDialogProps> = ({
   const callerLangObj = getLanguageByName(incomingCall.callerLanguage);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-sm bg-white border border-zinc-200 rounded-3xl p-6 text-center shadow-2xl text-zinc-900">
-        {/* Caller Avatar */}
-        <div className="relative w-20 h-20 mx-auto mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+      <div className="w-full max-w-sm bg-[#111b21] rounded-3xl p-6 text-center text-white shadow-2xl border border-[#222e35]">
+        {/* Security & call branding */}
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#8696a0] font-medium mb-4">
+          <Lock className="w-3 h-3 text-[#00a884]" />
+          <span>LinguaCall Audio Call</span>
+        </div>
+
+        {/* Pulsing Avatar */}
+        <div className="relative w-24 h-24 mx-auto mb-4">
+          <div className="absolute -inset-2 rounded-full border-2 border-[#00a884] animate-ping opacity-40" />
           <img
             src={
               incomingCall.callerPicture ||
               `https://api.dicebear.com/7.x/bottts/svg?seed=${incomingCall.callerUsername}`
             }
             alt={incomingCall.callerUsername}
-            className="w-full h-full rounded-full border border-zinc-200 object-cover bg-zinc-100"
+            className="w-full h-full rounded-full border-2 border-[#202c33] object-cover relative z-10"
           />
-          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white" />
         </div>
 
-        <h3 className="text-base font-bold text-zinc-900">
+        <h3 className="text-xl font-semibold text-[#e9edef]">
           {incomingCall.callerName || `@${incomingCall.callerUsername}`}
         </h3>
-        <p className="text-xs text-zinc-500 mb-4">
-          @{incomingCall.callerUsername} · Speaks {callerLangObj.flag} {callerLangObj.name}
+        <p className="text-xs text-[#8696a0] mt-1 mb-4">
+          Speaks {callerLangObj.flag} {callerLangObj.name}
         </p>
 
         {/* Translation Option */}
-        <div className="bg-zinc-50 p-3.5 rounded-2xl border border-zinc-200 text-left mb-5">
-          <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">
-            Hear conversation translated to:
+        <div className="bg-[#202c33] p-3 rounded-2xl text-left mb-6">
+          <label className="block text-[10px] font-semibold text-[#8696a0] uppercase tracking-wider mb-1">
+            Translate voice to:
           </label>
           <select
             id="incoming-hear-language-select"
             value={selectedHearLanguage}
             onChange={(e) => setSelectedHearLanguage(e.target.value)}
-            className="w-full bg-white border border-zinc-200 text-zinc-800 px-3 py-2 rounded-xl text-xs outline-none focus:border-zinc-400 font-medium cursor-pointer"
+            className="w-full bg-[#111b21] border border-[#2a3942] text-[#e9edef] px-3 py-1.5 rounded-xl text-xs outline-none cursor-pointer"
           >
             {SUPPORTED_LANGUAGES.map((lang) => (
               <option key={`inc_${lang.code}`} value={lang.name}>
@@ -89,25 +97,33 @@ export const IncomingCallDialog: React.FC<IncomingCallDialogProps> = ({
           </select>
         </div>
 
-        {/* Buttons */}
-        <div className="flex items-center gap-2.5">
-          <button
-            id="incoming-decline-btn"
-            onClick={handleReject}
-            className="flex-1 py-2.5 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <PhoneOff className="w-4 h-4 text-rose-600" />
-            <span>Decline</span>
-          </button>
+        {/* Accept & Decline Call Actions */}
+        <div className="flex items-center justify-around px-4">
+          {/* Decline */}
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              id="incoming-decline-btn"
+              onClick={handleReject}
+              className="w-14 h-14 rounded-full bg-[#ea0038] hover:bg-[#d00032] flex items-center justify-center text-white shadow-lg transition-transform active:scale-95 cursor-pointer"
+              title="Decline"
+            >
+              <PhoneOff className="w-6 h-6" />
+            </button>
+            <span className="text-[11px] text-[#8696a0] font-medium">Decline</span>
+          </div>
 
-          <button
-            id="incoming-accept-btn"
-            onClick={handleAccept}
-            className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <PhoneCall className="w-4 h-4" />
-            <span>Accept</span>
-          </button>
+          {/* Accept */}
+          <div className="flex flex-col items-center gap-1.5">
+            <button
+              id="incoming-accept-btn"
+              onClick={handleAccept}
+              className="w-14 h-14 rounded-full bg-[#00a884] hover:bg-[#008f6f] flex items-center justify-center text-white shadow-lg transition-transform active:scale-95 cursor-pointer animate-pulse"
+              title="Accept"
+            >
+              <Phone className="w-6 h-6" />
+            </button>
+            <span className="text-[11px] text-[#00a884] font-medium">Answer</span>
+          </div>
         </div>
       </div>
     </div>

@@ -84,54 +84,6 @@ const users = new Map<string, UserProfile>(); // username -> UserProfile
 const socketIdToUsername = new Map<string, string>();
 const rooms = new Map<string, { id: string; name: string; host: string; members: string[]; createdAt: number }>();
 
-// Seed default demo users for instant testing/calling
-const SEED_USERS: UserProfile[] = [
-  {
-    userId: "demo_elena",
-    username: "elena_es",
-    name: "Elena Rodriguez",
-    picture: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-    myLanguage: "Spanish",
-    hearLanguage: "English",
-    online: true,
-    lastActive: Date.now(),
-  },
-  {
-    userId: "demo_rahul",
-    username: "rahul_hi",
-    name: "Rahul Sharma",
-    picture: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
-    myLanguage: "Hindi",
-    hearLanguage: "English",
-    online: true,
-    lastActive: Date.now(),
-  },
-  {
-    userId: "demo_kenji",
-    username: "kenji_ja",
-    name: "Kenji Sato",
-    picture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80",
-    myLanguage: "Japanese",
-    hearLanguage: "English",
-    online: true,
-    lastActive: Date.now(),
-  },
-  {
-    userId: "demo_sophie",
-    username: "sophie_fr",
-    name: "Sophie Dubois",
-    picture: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
-    myLanguage: "French",
-    hearLanguage: "English",
-    online: true,
-    lastActive: Date.now(),
-  },
-];
-
-for (const u of SEED_USERS) {
-  users.set(u.username.toLowerCase(), u);
-}
-
 // -------------------------------------------------------------
 // REST API ROUTES
 // -------------------------------------------------------------

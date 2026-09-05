@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { UserProfile, GroupRoom } from "./types";
+import { UserProfile } from "./types";
 import { getSocket } from "./services/socket";
-import { Navbar } from "./components/Navbar";
 import { AuthModal } from "./components/AuthModal";
 import { UsernameSetup } from "./components/UsernameSetup";
-import { CallsTab } from "./components/CallsTab";
-import { ChatsTab } from "./components/ChatsTab";
-import { GroupTab } from "./components/GroupTab";
-import { SettingsTab } from "./components/SettingsTab";
 import { ActiveCallModal } from "./components/ActiveCallModal";
 import { IncomingCallDialog } from "./components/IncomingCallDialog";
+import { LinguaCallLayout } from "./components/LinguaCallLayout";
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(() => {
@@ -24,7 +20,6 @@ export default function App() {
   const [isSettingUpUsername, setIsSettingUpUsername] = useState<boolean>(false);
   const [tempAuthUser, setTempAuthUser] = useState<Partial<UserProfile> | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"calls" | "chats" | "group" | "settings">("calls");
   const [onlineUsers, setOnlineUsers] = useState<UserProfile[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
@@ -39,7 +34,6 @@ export default function App() {
   } | null>(null);
 
   const [incomingCall, setIncomingCall] = useState<any | null>(null);
-  const [chatTargetUser, setChatTargetUser] = useState<UserProfile | null>(null);
 
   // Setup socket connection
   useEffect(() => {
@@ -191,90 +185,29 @@ export default function App() {
     }
   };
 
-  // Start group call
-  const handleStartGroupCall = (room: GroupRoom) => {
-    if (!user) return;
-    const roomTarget: UserProfile = {
-      userId: `room_${room.id}`,
-      username: room.id,
-      name: room.name,
-      picture: `https://api.dicebear.com/7.x/identicon/svg?seed=${room.id}`,
-      myLanguage: "Multilingual",
-      hearLanguage: user.hearLanguage,
-      online: true,
-      lastActive: Date.now(),
-    };
-
-    setActiveCall({
-      targetUser: roomTarget,
-      role: "group",
-      myLanguage: user.myLanguage,
-      hearLanguage: user.hearLanguage,
-    });
-  };
-
-  const handleOpenChat = (target: UserProfile) => {
-    setChatTargetUser(target);
-    setActiveTab("chats");
-  };
-
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 flex flex-col font-sans selection:bg-zinc-900 selection:text-white antialiased">
-      {/* Top Navigation */}
-      <Navbar
-        user={user}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onLogout={handleLogout}
-        socketConnected={socketConnected}
-      />
-
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {!user ? (
-          isSettingUpUsername && tempAuthUser ? (
+    <div className="min-h-screen bg-[#eae6df] text-[#111b21] flex flex-col font-sans selection:bg-[#00a884] selection:text-white antialiased">
+      {!user ? (
+        <main className="flex-1 flex items-center justify-center p-4">
+          {isSettingUpUsername && tempAuthUser ? (
             <UsernameSetup
               initialUser={tempAuthUser}
               onComplete={handleUsernameSetupComplete}
             />
           ) : (
             <AuthModal onSignInSuccess={handleSignInSuccess} />
-          )
-        ) : (
-          <>
-            {activeTab === "calls" && (
-              <CallsTab
-                currentUser={user}
-                onlineUsers={onlineUsers}
-                onStartCall={handleStartCall}
-                onOpenChat={handleOpenChat}
-              />
-            )}
-
-            {activeTab === "chats" && (
-              <ChatsTab
-                currentUser={user}
-                onlineUsers={onlineUsers}
-                initialChatUser={chatTargetUser}
-              />
-            )}
-
-            {activeTab === "group" && (
-              <GroupTab
-                currentUser={user}
-                onStartGroupCall={handleStartGroupCall}
-              />
-            )}
-
-            {activeTab === "settings" && (
-              <SettingsTab
-                currentUser={user}
-                onUpdateProfile={handleUpdateProfile}
-              />
-            )}
-          </>
-        )}
-      </main>
+          )}
+        </main>
+      ) : (
+        <LinguaCallLayout
+          currentUser={user}
+          onlineUsers={onlineUsers}
+          socketConnected={socketConnected}
+          onStartCall={handleStartCall}
+          onUpdateProfile={handleUpdateProfile}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Incoming Call Notification Dialog */}
       {incomingCall && user && (
