@@ -1,78 +1,117 @@
 import React, { useEffect, useState, useRef } from "react";
 import { UserProfile } from "../types";
-import { Lock, PhoneCall, Globe2, ShieldCheck, Loader2, AlertCircle } from "lucide-react";
+import { Lock, PhoneCall, Globe2, ShieldCheck, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 
 interface AuthModalProps {
   onSignInSuccess: (user: Partial<UserProfile>) => void;
+}
+
+// Unicode-safe JWT decoder for Google OAuth tokens
+function parseGoogleJwt(token: string): any {
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (err) {
+    console.error("JWT parse error:", err);
+    return null;
+  }
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
   const [googleClientId, setGoogleClientId] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string>("");
+  const [buttonRendered, setButtonRendered] = useState<boolean>(false);
   const buttonContainerRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef<boolean>(true);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
     fetch("/api/config")
       .then((res) => res.json())
       .then((data) => {
-        if (!isMounted) return;
+        if (!isMountedRef.current) return;
         if (data.googleClientId) {
           setGoogleClientId(data.googleClientId);
           initGoogleOAuth(data.googleClientId);
         } else {
           setIsLoading(false);
-          setAuthError("Google Client ID not configured in server environment.");
+          setAuthError("Google Client ID not configured on server.");
         }
       })
-      .catch((err) => {
-        if (!isMounted) return;
+      .catch(() => {
+        if (!isMountedRef.current) return;
         setIsLoading(false);
-        setAuthError("Failed to load server configuration. Please check your network connection.");
+        setAuthError("Could not reach backend server.");
       });
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
   }, []);
 
   const initGoogleOAuth = (clientId: string) => {
+    let attempts = 0;
+    const maxAttempts = 20;
+
     const renderGoogleBtn = () => {
-      if (typeof window !== "undefined" && (window as any).google?.accounts?.id) {
+      if (!isMountedRef.current) return;
+
+      const gsi = (window as any).google?.accounts?.id;
+      const container = buttonContainerRef.current;
+
+      if (gsi && container) {
         try {
-          (window as any).google.accounts.id.initialize({
+          gsi.initialize({
             client_id: clientId,
             callback: (response: any) => {
-              handleGoogleCredential(response.credential);
+              if (response?.credential) {
+                handleGoogleCredential(response.credential);
+              }
             },
             auto_select: false,
             cancel_on_tap_outside: true,
           });
 
-          const container = buttonContainerRef.current || document.getElementById("google-signin-btn-container");
-          if (container) {
-            container.innerHTML = "";
-            (window as any).google.accounts.id.renderButton(container, {
-              type: "standard",
-              theme: "outline",
-              size: "large",
-              text: "continue_with",
-              shape: "pill",
-              logo_alignment: "left",
-              width: 300,
-            });
+          // Safe rendering: do NOT touch container.innerHTML or React children
+          gsi.renderButton(container, {
+            type: "standard",
+            theme: "outline",
+            size: "large",
+            text: "continue_with",
+            shape: "pill",
+            logo_alignment: "left",
+            width: 300,
+          });
+
+          if (isMountedRef.current) {
+            setButtonRendered(true);
+            setIsLoading(false);
           }
-          setIsLoading(false);
         } catch (e: any) {
-          console.error("Google Sign-In initialization failed:", e);
-          setIsLoading(false);
-          setAuthError("Could not initialize Google OAuth. Please check browser settings.");
+          console.warn("Google button render note:", e);
+          if (isMountedRef.current) {
+            setIsLoading(false);
+            setAuthError("Google Identity services blocked or unavailable in this window.");
+          }
         }
+      } else if (attempts < maxAttempts) {
+        attempts++;
+        setTimeout(renderGoogleBtn, 250);
       } else {
-        // GSI script might still be downloading
-        setTimeout(renderGoogleBtn, 300);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+          setAuthError("Google Sign-In library failed to load. Please check connection.");
+        }
       }
     };
 
@@ -81,16 +120,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
 
   const handleGoogleCredential = (credential: string) => {
     try {
-      setIsLoading(true);
-      setAuthError("");
-      const payload = JSON.parse(atob(credential.split(".")[1]));
-      const { sub: userId, name, email, picture, given_name } = payload;
-
-      if (!userId) {
-        throw new Error("Invalid token received from Google");
+      const payload = parseGoogleJwt(credential);
+      if (!payload || !payload.sub) {
+        throw new Error("Invalid Google token payload");
       }
 
-      // Generate suggested username from email or given name
+      const { sub: userId, name, email, picture, given_name } = payload;
       const emailPrefix = (email || "").split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "");
       const suggestedUsername = emailPrefix || `user_${userId.slice(-6)}`;
 
@@ -102,9 +137,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         picture: picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${userId}`,
       });
     } catch (err: any) {
-      console.error("Failed to parse Google OAuth credential:", err);
-      setAuthError("Failed to authenticate with Google. Please try again.");
-      setIsLoading(false);
+      console.error("Error processing Google sign-in:", err);
+      if (isMountedRef.current) {
+        setAuthError("Failed to parse Google OAuth credential. Please try again.");
+      }
+    }
+  };
+
+  const handleRetry = () => {
+    setAuthError("");
+    setIsLoading(true);
+    if (googleClientId) {
+      initGoogleOAuth(googleClientId);
     }
   };
 
@@ -123,7 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         </p>
       </div>
 
-      {/* Feature Highlights */}
+      {/* Highlights */}
       <div className="bg-[#f0f2f5] rounded-xl p-3.5 mb-6 border border-[#e9edef] space-y-2">
         <div className="flex items-center gap-2.5 text-xs text-[#3b4a54]">
           <Globe2 className="w-4 h-4 text-[#00a884] shrink-0" />
@@ -139,32 +183,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSignInSuccess }) => {
         </div>
       </div>
 
-      {/* Google OAuth Section - Sole Authentication Method */}
+      {/* Google Sign-In Area */}
       <div className="flex flex-col items-center justify-center pt-2 pb-3">
         <div className="text-[11px] font-semibold text-[#54656f] uppercase tracking-wider mb-3">
           Sign In to Continue
         </div>
 
-        <div
-          id="google-signin-btn-container"
-          ref={buttonContainerRef}
-          className="min-h-[44px] flex items-center justify-center w-full"
-        >
-          {isLoading && (
-            <div className="flex items-center justify-center gap-2 py-2.5 text-xs text-[#54656f]">
-              <Loader2 className="w-4 h-4 text-[#00a884] animate-spin" />
-              <span>Loading Google Sign-In...</span>
-            </div>
-          )}
-        </div>
+        {/* Loading Spinner - Kept COMPLETELY OUTSIDE the Google button DOM container */}
+        {isLoading && (
+          <div className="flex items-center justify-center gap-2 py-3 text-xs text-[#54656f]">
+            <Loader2 className="w-4 h-4 text-[#00a884] animate-spin" />
+            <span>Connecting to Google Identity...</span>
+          </div>
+        )}
 
+        {/* Dedicated empty container for Google GSI button */}
+        <div
+          ref={buttonContainerRef}
+          id="google-signin-btn-container"
+          className={`min-h-[44px] flex items-center justify-center w-full transition-opacity duration-200 ${
+            isLoading || !buttonRendered ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
+          }`}
+        />
+
+        {/* Error notification */}
         {authError && (
-          <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2 text-left w-full">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Authentication Notice</p>
-              <p className="text-[11px] mt-0.5 text-rose-600">{authError}</p>
+          <div className="mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex flex-col gap-2 text-left w-full">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-rose-800">Sign-In Notice</p>
+                <p className="text-[11px] mt-0.5 text-rose-700 leading-relaxed">{authError}</p>
+              </div>
             </div>
+            <button
+              onClick={handleRetry}
+              className="self-end px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Retry</span>
+            </button>
           </div>
         )}
 
